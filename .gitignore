@@ -1,0 +1,6 @@
+.env
+tests/tmp/
+*.log
+.DS_Store
+
+docs/
