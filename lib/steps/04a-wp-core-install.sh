@@ -40,5 +40,21 @@ step_04a_wp_core_install() {
       --skip-email \
       --path=. ) || return 1
 
+  _install_core_language "$project_dir"
+
   state_mark_done "$project_dir" "$id"
+}
+
+# Ensures DEFAULT_WP_LOCALE is installed and active. Non-blocking: step 02 may
+# have fallen back to en_US because the language pack isn't published yet.
+_install_core_language() {
+  local project_dir="$1"
+  [[ -z "${DEFAULT_WP_LOCALE:-}" || "$DEFAULT_WP_LOCALE" == "en_US" ]] && return 0
+
+  if ( cd "$project_dir" && wp language core install "$DEFAULT_WP_LOCALE" --activate --path=. ); then
+    log_success "wp-core-install: language $DEFAULT_WP_LOCALE active"
+  else
+    log_warn "wp-core-install: language $DEFAULT_WP_LOCALE not available for this WP version, site left in en_US."
+    log_warn "  Install it later with: wp language core install $DEFAULT_WP_LOCALE --activate"
+  fi
 }

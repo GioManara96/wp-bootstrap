@@ -81,6 +81,41 @@ If a step fails, fix the underlying issue then:
 wp-bootstrap --resume                # reads .bootstrap.yml from cwd or --name dir
 ```
 
+Progress is tracked in `~/Sites/<name>/.bootstrap-state`, one `<step-id>=done` line per completed
+step. `--resume` skips those and reruns the rest.
+
+#### Completed a step by hand?
+
+If you complete a failed step manually, mark it as done before resuming. Otherwise `--resume`
+reruns it, and most steps abort when they find their output already there (e.g. step 02 with
+"WordPress already present"):
+
+```bash
+cd ~/Sites/<name>
+echo "02_download_wp=done" >> .bootstrap-state   # use the step id from the table below
+wp-bootstrap --resume
+```
+
+| Step | State id | Done by hand when… |
+|---|---|---|
+| 01 | `01_clone_repo` | repo cloned into `~/Sites/<name>/` |
+| 02 | `02_download_wp` | WordPress core files present (`wp-load.php`) |
+| 03 | `03_create_db` | DB and DB user created, privileges granted |
+| 04 | `04_wp_config` | `wp-config.php` in place |
+| 04a | `04a_wp_core_install` | `wp core is-installed` succeeds |
+| 04b | `04b_themes` | Astra + child theme installed and active |
+| 04c | `04c_plugins` | plugins installed and active |
+| 05 | `05_htaccess` | `.htaccess` in place |
+| 06 | `06_tmp_folder` | `tmp/` exists |
+| 07 | `07_sync_script` | `sync-operation.sh` in place |
+| 08 | `08_frontend_tools` | `frontend_tools/` copied and `npm install` done |
+| 09 | `09_vhost` | vhost block appended to the Apache config |
+| 10 | `10_logs_folder` | `~/Sites/logs/` exists |
+| 11 | `11_restart_httpd` | `brew services restart httpd` done |
+| 12 | `12_first_db_pull` | `./sync-operation.sh db:pull` done |
+
+To redo a step instead, drop its line from `.bootstrap-state` or use `--force-step <NN>`.
+
 ### Force a specific step
 
 ```bash
@@ -106,10 +141,10 @@ wp-bootstrap --dry-run ...           # prints every command, makes no changes
 | # | Step | Notes |
 |---|---|---|
 | 01 | `git clone` GitLab repo → `~/Sites/<name>/` | strict: aborts if dir exists |
-| 02 | `wp core download --locale=it_IT` | |
+| 02 | `wp core download --locale=it_IT` | falls back to en_US if the locale package is missing |
 | 03 | `CREATE DATABASE` + `CREATE USER` + `GRANT ALL` | uses `.env` admin creds |
 | 04 | Generate `wp-config.php` (live salts from api.wordpress.org) | |
-| 04a | `wp core install` (admin/admin, idempotent) | needed so 04b/04c can activate |
+| 04a | `wp core install` (admin/admin, idempotent) + `wp language core install --activate` | needed so 04b/04c can activate; language step is non-blocking |
 | 04b | Delete default themes, install Astra, scaffold + activate child theme | child uses `--theme-name` value |
 | 04c | Delete akismet + hello, install + activate 13 plugins | see plugin list below |
 | 05 | Generate `.htaccess` | |

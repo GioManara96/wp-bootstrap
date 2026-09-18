@@ -23,8 +23,12 @@ step_02_download_wp() {
   log_step 02 "download-wp: wp core download --locale=$DEFAULT_WP_LOCALE"
   if [[ "$DRY_RUN" == "true" ]]; then
     log_info "DRY-RUN: (cd $project_dir && wp core download --locale=$DEFAULT_WP_LOCALE --path=. $force_flag)"
-  else
-    ( cd "$project_dir" && wp core download --locale="$DEFAULT_WP_LOCALE" --path=. $force_flag ) || return 1
+  elif ! ( cd "$project_dir" && wp core download --locale="$DEFAULT_WP_LOCALE" --path=. $force_flag ); then
+    # The locale package may not be published yet for the latest WP release.
+    # Fall back to en_US; step 04a tries to install the language pack afterwards.
+    [[ "$DEFAULT_WP_LOCALE" == "en_US" ]] && return 1
+    log_warn "download-wp: locale $DEFAULT_WP_LOCALE not available, falling back to en_US"
+    ( cd "$project_dir" && wp core download --path=. --force ) || return 1
   fi
 
   state_mark_done "$project_dir" "$id"
