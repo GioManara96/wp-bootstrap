@@ -162,8 +162,7 @@ Before you run anything:
 wpb get git@git.example.com:group/acme-hotel.git
 ```
 
-`wpb get` asks **once** for the 4 remote values, unless the repository contains an old
-`sync-operation.sh` or `db-operation.sh`, in which case it imports them from there.
+`wpb get` asks **once** for the 4 remote values and saves them in the project's `.env`.
 
 | Prompt | What it is |
 |---|---|
@@ -194,15 +193,18 @@ wpb get <url> --name acme-hotel-v2   # different folder / domain
 wpb get <url> --no-pull              # skip plugins:pull and db:pull (e.g. staging not ready yet)
 ```
 
-### Projects already on your Mac from the old script
+### Projects already on your Mac, not created by wpb
 
-You don't need to migrate anything. Run any remote command inside the project and `wpb` reads
-the values from `sync-operation.sh` or `db-operation.sh` into `.env`:
+The sync commands work in any WordPress folder. Run one inside the project; the first time it
+asks for the 4 remote values and writes `.env`:
 
 ```bash
-cd ~/Sites/old-project
-wpb ssh        # or wpb db:pull, wpb assets:pull, …
+cd ~/Sites/some-project
+wpb db:pull        # or wpb ssh, wpb assets:pull, …
 ```
+
+To have it served at `<folder>.stage`, the folder name must be a valid domain label
+(`a-z`, `0-9`, `-`).
 
 ---
 
@@ -326,8 +328,8 @@ Licenses of premium plugins are activated per site.
   same `--name` if you used one. Finished steps are skipped, because progress is stored in
   `<project>/.bootstrap-state`. The error message prints the exact command to re-run.
 - **Redo one step.** Use `wpb get <url> --force-step wp_config`, for example.
-- **"already served by a legacy vhost".** An old per-site block in the vhosts file already uses
-  that domain. Pass `--name` with another name, or remove the old block.
+- **"already served by a legacy vhost".** A per-site `<VirtualHost>` block written by hand in the
+  vhosts file already uses that domain, and it takes precedence over the wildcard. Pass `--name` with another name, or remove the old block.
 - **"Database … already exists".** `wpb` never drops databases. Drop it yourself if it's
   leftover, or use `--name`.
 - **"table prefix mismatch" on `db:push`.** The staging install uses a different prefix than
