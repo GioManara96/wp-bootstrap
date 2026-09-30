@@ -40,7 +40,7 @@ Commands:
 
 Options:
   --name <name>             Project/folder name (default: from the repo URL) -> <name>.stage
-  --no-pull                 get: skip the first db:pull
+  --no-pull                 get: skip plugins:pull and db:pull
   --force-step <id>         Re-run one step (e.g. wp_config)
   --dry-run                 Print what would happen, change nothing
   --yes, -y                 Skip confirmations (db:push, starter:refresh)
