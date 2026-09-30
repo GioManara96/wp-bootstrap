@@ -50,7 +50,7 @@ Apache vhost again.
 brew install bash wp-cli httpd mariadb dnsmasq nvm
 brew services start mariadb
 brew services start httpd
-nvm install 20.19
+nvm install 24        # or whatever your projects' frontend_tools/.nvmrc asks for
 ```
 
 ### 1.2 Resolve `*.stage` to your Mac (dnsmasq)
