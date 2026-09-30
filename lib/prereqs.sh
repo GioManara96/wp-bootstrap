@@ -12,15 +12,14 @@ _REQUIRED_TOOLS=(
   "rsync|installed by default on macOS"
   "curl|installed by default on macOS"
   "ssh|installed by default on macOS"
-  "scp|installed by default on macOS"
   "awk|installed by default on macOS"
 )
 
-# check_bash_version — wp-bootstrap requires bash 4+ (associative arrays, printf -v).
+# check_bash_version — wpb requires bash 4+ (associative arrays, printf -v).
 # macOS ships bash 3.2; user must brew install bash and ensure /opt/homebrew/bin is ahead in PATH.
 check_bash_version() {
   if (( BASH_VERSINFO[0] < 4 )); then
-    log_error "wp-bootstrap requires Bash 4.0+ (you're on $BASH_VERSION)."
+    log_error "wpb requires Bash 4.0+ (you're on $BASH_VERSION)."
     log_error "  Fix on macOS: brew install bash"
     log_error "  Then ensure '/opt/homebrew/bin/bash' is on PATH before '/bin/bash'."
     return 1
@@ -41,6 +40,9 @@ check_prereqs() {
       missing+=("  - $cmd → $hint")
     fi
   done
+  if ! httpd_bin >/dev/null 2>&1; then
+    missing+=("  - Homebrew httpd not found: brew install httpd")
+  fi
   if [[ ${#missing[@]} -gt 0 ]]; then
     log_error "Missing required tools:"
     printf '%s\n' "${missing[@]}" >&2

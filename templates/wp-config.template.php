@@ -2,7 +2,7 @@
 /**
  * WordPress base configuration file.
  *
- * Generated from templates/wp-config.template.php by wp-bootstrap.
+ * Generated from templates/wp-config.template.php by wpb.
  *
  * @link https://wordpress.org/support/article/editing-wp-config-php/
  * @package WordPress
@@ -13,7 +13,7 @@ define( 'DB_NAME', '{{DB_NAME}}' );
 define( 'DB_USER', '{{DB_USER}}' );
 define( 'DB_PASSWORD', '{{DB_PASSWORD}}' );
 define( 'DB_HOST', '{{DB_HOST}}' );
-define( 'DB_CHARSET', 'utf8' );
+define( 'DB_CHARSET', 'utf8mb4' );
 define( 'DB_COLLATE', '' );
 
 /**#@+
@@ -40,6 +40,7 @@ define( 'WP_DEBUG_LOG', true );
 define( 'WP_MEMORY_LIMIT', '{{WP_MEMORY_LIMIT}}' );
 define( 'DISALLOW_FILE_MODS', false );
 define( 'AUTOMATIC_UPDATER_DISABLED', false );
+define( 'WP_ENVIRONMENT_TYPE', 'local' );
 
 /* That's all, stop editing! Happy publishing. */
 

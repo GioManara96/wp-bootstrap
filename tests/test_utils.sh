@@ -56,4 +56,17 @@ if substitute_template "$template" "$output" X "ok" ODD_KEY 2>/dev/null; then
   fail "substitute_template should reject odd arg count"
 fi
 
+# ---- log_step prints "[<id>] <message>" ----
+out="$(log_step core_download "wp core download" 2>&1)"
+[[ "$out" == *"[core_download] wp core download"* ]] || fail "log_step format: $out"
+
+# ---- kv_clean_value ----
+[[ "$(kv_clean_value '"abc"')" == "abc" ]]        || fail "kv dq"
+[[ "$(kv_clean_value "'abc'")" == "abc" ]]        || fail "kv sq"
+[[ "$(kv_clean_value $'abc\r')" == "abc" ]]       || fail "kv cr"
+[[ "$(kv_clean_value $'"abc"\r')" == "abc" ]]     || fail "kv cr+quotes"
+[[ "$(kv_clean_value "\"abc'")" == "\"abc'" ]]    || fail "kv mismatched quotes"
+[[ "$(kv_clean_value '"')" == '"' ]]              || fail "kv single quote char"
+[[ "$(kv_clean_value 'a"b"')" == 'a"b"' ]]        || fail "kv inner quotes"
+
 echo "PASS: test_utils.sh"

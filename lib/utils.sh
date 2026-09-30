@@ -15,10 +15,8 @@ log_info()    { printf '%s[%s] [INFO]%s %s\n'    "$_BLUE"   "$(_timestamp)" "$_R
 log_success() { printf '%s[%s] [ OK ]%s %s\n'    "$_GREEN"  "$(_timestamp)" "$_RESET" "$*" >&2; }
 log_warn()    { printf '%s[%s] [WARN]%s %s\n'    "$_YELLOW" "$(_timestamp)" "$_RESET" "$*" >&2; }
 log_error()   { printf '%s[%s] [FAIL]%s %s\n'    "$_RED"    "$(_timestamp)" "$_RESET" "$*" >&2; }
-# Total steps in the bootstrap flow. Set by orchestrator before calling log_step.
-: "${BOOTSTRAP_TOTAL_STEPS:=15}"
-
-log_step()    { printf '%s[%s] [%s/%s] %s%s\n'   "$_GRAY"   "$(_timestamp)" "$1" "$BOOTSTRAP_TOTAL_STEPS" "$2" "$_RESET" >&2; }
+# log_step <step-id> <message>
+log_step()    { printf '%s[%s] [%s] %s%s\n'      "$_GRAY"   "$(_timestamp)" "$1" "$2" "$_RESET" >&2; }
 
 # ---- prompt_with_default <message> <varname> [default] ----
 # Reads a line from stdin into varname. If user hits Enter and default is set, uses default.
@@ -112,4 +110,17 @@ substitute_template() {
   done
 
   env "${env_args[@]}" awk "$awk_cmd" "$template" > "$output"
+}
+
+# kv_clean_value <raw> — strip one trailing CR and one pair of matching surrounding quotes
+kv_clean_value() {
+  local v="$1"
+  v="${v%$'\r'}"
+  if (( ${#v} >= 2 )); then
+    case "$v" in
+      \"*\") v="${v:1:${#v}-2}" ;;
+      \'*\') v="${v:1:${#v}-2}" ;;
+    esac
+  fi
+  printf '%s' "$v"
 }

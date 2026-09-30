@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lib/state.sh — manages .bootstrap-state file (key=value).
 # All mutating functions are no-ops when DRY_RUN=true or when the project
-# directory doesn't exist yet (e.g. before step 01 has run).
+# directory doesn't exist yet (e.g. before the project folder exists).
 
 _state_file() { printf '%s/.bootstrap-state' "$1"; }
 

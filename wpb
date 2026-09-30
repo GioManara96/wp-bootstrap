@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# wpb — set up WordPress projects locally (new from the starter, or existing from GitLab).
+set -uo pipefail
+
+if (( BASH_VERSINFO[0] < 4 )); then
+  {
+    echo "wpb requires Bash 4.0+ (you're on $BASH_VERSION)."
+    echo "  Fix on macOS: brew install bash"
+    echo "  Then ensure '/opt/homebrew/bin/bash' is on PATH before '/bin/bash'."
+  } >&2
+  exit 1
+fi
+
+WPB_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+for _f in "$WPB_ROOT"/lib/*.sh "$WPB_ROOT"/lib/steps/*.sh "$WPB_ROOT"/lib/commands/*.sh; do
+  # shellcheck source=/dev/null
+  source "$_f"
+done
+unset _f
+
+DRY_RUN=false; YES=false; NO_PULL=false; FORCE_STEP=""; NAME=""; TABLE_PREFIX=""; PROJECT_DIR=""
+
+WPB_STEP_IDS="starter_copy clone git_init git_exclude frontend_tools env_file core_download db_create wp_config htaccess tmp_folder wp_install first_push plugins_pull first_pull"
+
+wpb_help() {
+  cat <<'HELP'
+Usage: wpb <command> [options]
+
+Commands:
+  setup                     One-time machine setup: config, MySQL check, wildcard vhost
+  new <gitlab-url>          New project from the starter; URL of an EMPTY GitLab repo
+  get <gitlab-url>          Existing project: clone, .env, core, DB, wp-config, plugins:pull, db:pull
+  db:pull | db:push         Sync the DB with the remote (run inside a project folder)
+  plugins:pull              Fill plugin files missing from git (rsync --ignore-existing)
+  assets:pull | assets:push Sync wp-content/uploads with the remote
+  ssh                       SSH into the remote app folder
+  starter:refresh           Copy newest plugin/theme versions from ~/Sites into the starter
+  help                      Show this help
+
+Options:
+  --name <name>             Project/folder name (default: from the repo URL) -> <name>.stage
+  --no-pull                 get: skip the first db:pull
+  --force-step <id>         Re-run one step (e.g. wp_config)
+  --dry-run                 Print what would happen, change nothing
+  --yes, -y                 Skip confirmations (db:push, starter:refresh)
+HELP
+}
+
+main() {
+  local cmd="${1:-help}"
+  [[ $# -gt 0 ]] && shift
+  local -a args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name|--force-step)
+        if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then log_error "$1 needs a value"; return 1; fi
+        if [[ "$1" == "--name" ]]; then NAME="$2"; else FORCE_STEP="$2"; fi
+        shift 2 ;;
+      --no-pull)    NO_PULL=true; shift ;;
+      --dry-run)    DRY_RUN=true; shift ;;
+      --yes|-y)     YES=true; shift ;;
+      --help|-h)    wpb_help; return 0 ;;
+      -*)           log_error "Unknown option: $1"; wpb_help >&2; return 1 ;;
+      *)            args+=("$1"); shift ;;
+    esac
+  done
+  if (( ${#args[@]} > 1 )); then log_error "Unexpected extra argument(s): ${args[*]:1}"; return 1; fi
+  if [[ -n "$FORCE_STEP" && " $WPB_STEP_IDS " != *" $FORCE_STEP "* ]]; then
+    log_error "Unknown step id: $FORCE_STEP. Valid: $WPB_STEP_IDS"; return 1
+  fi
+  check_bash_version || return 1
+  config_load
+  case "$cmd" in
+    setup)           cmd_setup ;;
+    new)             cmd_new "${args[0]:-}" ;;
+    get)             cmd_get "${args[0]:-}" ;;
+    db:pull)         cmd_db_pull ;;
+    db:push)         cmd_db_push ;;
+    plugins:pull)    cmd_plugins_pull ;;
+    assets:pull)     cmd_assets_pull ;;
+    assets:push)     cmd_assets_push ;;
+    ssh)             cmd_ssh ;;
+    starter:refresh) cmd_starter_refresh ;;
+    help|--help|-h)  wpb_help ;;
+    *)               log_error "Unknown command: $cmd"; wpb_help >&2; return 1 ;;
+  esac
+}
+
+main "$@"
