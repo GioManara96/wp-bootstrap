@@ -38,8 +38,15 @@ Apache vhost again.
 - macOS 12.3 or later (`wpb` uses `readlink -f`).
 - Homebrew packages: `bash` (4+), `wp-cli`, `httpd`, `mysql-client` or MariaDB/MySQL, `dnsmasq`
   and `nvm`.
-- SSH access to the staging server. The sync commands expect a RunCloud-style layout: the site
-  lives in `~/webapps/<app>` of the SSH user.
+- SSH access to the staging server, with `wp-cli` installed there. The sync commands expect a
+  RunCloud-style layout: the site lives in `~/webapps/<app>` of the SSH user.
+
+> **Not on RunCloud?** `wpb` is configured for RunCloud because that is where I host my sites,
+> but nothing else in it depends on RunCloud: it only uses `ssh`, `rsync` and the remote `wp`.
+> The remote path is defined in one place, `_remote_app()` in
+> [`lib/commands/remote.sh`](lib/commands/remote.sh); every remote command goes through it.
+> Change it to your host's layout, for example `printf 'public_html'` (cPanel) or
+> `printf '/var/www/%s' "$REMOTE_APP_NAME"`.
 - Optional: a **starter** repository, needed only for `wpb new` and `wpb starter:refresh`. See
   [The starter](#the-starter).
 
