@@ -35,3 +35,21 @@ url_strip_slash() {
   while [[ "$u" == */ ]]; do u="${u%/}"; done
   printf '%s' "$u"
 }
+
+# url_other_scheme <url> — same URL with http ↔ https swapped
+url_other_scheme() {
+  case "$1" in
+    https://*) printf 'http://%s' "${1#https://}" ;;
+    http://*)  printf 'https://%s' "${1#http://}" ;;
+    *)         printf '%s' "$1" ;;
+  esac
+}
+
+# url_json_escape <url> — "/" → "\/", as URLs are stored in JSON (Elementor data, block attributes)
+url_json_escape() { printf '%s' "${1//\//\\/}"; }
+
+# url_host <url> — host[:port] part
+url_host() {
+  local h="${1#*://}"
+  printf '%s' "${h%%/*}"
+}

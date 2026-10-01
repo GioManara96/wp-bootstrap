@@ -84,4 +84,12 @@ NO_PULL=true
 out="$(project_rerun_hint get 2>&1)"
 [[ "$out" == *"--name hint --no-pull"* ]] || fail "rerun hint no-pull: $out"
 
+# adopt without a repo: rerun hint has no URL, init vars need --name
+NO_PULL=false; GIT_URL=""; NAME="testsite"
+out="$(project_rerun_hint adopt 2>&1)"
+[[ "$out" == *"wpb adopt --name testsite"* ]] || fail "rerun hint without url: $out"
+NAME=""; project_init_vars "" 2>/dev/null && fail "empty url without --name accepted"
+NAME="testsite"; project_init_vars "" || fail "init vars without url"
+[[ "$PROJECT_DIR" == "$SITES_DIR/testsite" && -z "$GIT_URL" ]] || fail "init vars without url: $PROJECT_DIR"
+
 echo "PASS: test_project.sh"

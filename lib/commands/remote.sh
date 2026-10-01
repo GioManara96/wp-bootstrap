@@ -94,9 +94,46 @@ cmd_db_pull() {
   if [[ -n "$prefix" ]]; then
     in_project wp config set table_prefix "$prefix" --type=variable --quiet || return 1
   fi
-  in_project wp search-replace "$REMOTE_URL" "$LOCAL_URL" --all-tables-with-prefix --quiet || return 1
+  _db_pull_replace_urls || return 1
   in_project wp rewrite flush --quiet || return 1
   log_success "db:pull done (dump kept in tmp/$dump)"
+}
+
+# _db_option <name> — option value from the local DB, trailing slashes removed
+_db_option() { url_strip_slash "$(in_project wp option get "$1" 2>/dev/null | _last_line_trim)"; }
+
+# _db_pull_replace_urls — rewrite the remote URLs of the imported DB to LOCAL_URL.
+# REMOTE_URL may carry the wrong scheme (typed http, site served on https), home/siteurl
+# may differ from it, and Elementor/blocks store URLs JSON-escaped (https:\/\/…):
+# every scheme of every remote URL is replaced, plain and escaped.
+_db_pull_replace_urls() {
+  local home siteurl u src
+  local -a sources=()
+  home="$(_db_option home)"; siteurl="$(_db_option siteurl)"
+  if [[ "$home" =~ ^https?:// && "$home" != "$REMOTE_URL" \
+        && "$(url_host "$home")" == "$(url_host "$REMOTE_URL")" ]]; then
+    log_warn "db:pull: the remote site is $home — REMOTE_URL in .env updated (was $REMOTE_URL)"
+    penv_set "$PROJECT_DIR/.env" REMOTE_URL "$home" || return 1
+    REMOTE_URL="$home"
+  fi
+  for u in "$REMOTE_URL" "$home" "$siteurl"; do
+    [[ "$u" =~ ^https?:// ]] || continue
+    for src in "$u" "$(url_other_scheme "$u")"; do
+      [[ "$src" == "$LOCAL_URL" || " ${sources[*]} " == *" $src "* ]] || sources+=("$src")
+    done
+  done
+  for src in "${sources[@]}"; do
+    in_project wp search-replace "$src" "$LOCAL_URL" --all-tables-with-prefix --quiet || return 1
+    in_project wp search-replace "$(url_json_escape "$src")" "$(url_json_escape "$LOCAL_URL")" \
+      --all-tables-with-prefix --quiet || return 1
+  done
+  for u in home siteurl; do
+    [[ "$(_db_option "$u")" == "$LOCAL_URL"* ]] \
+      || log_warn "db:pull: option $u is still '$(_db_option "$u")' — check it (wp option get $u)"
+  done
+  if in_project wp plugin is-active elementor >/dev/null 2>&1; then
+    in_project wp elementor flush_css >/dev/null 2>&1 || log_warn "db:pull: wp elementor flush_css failed"
+  fi
 }
 
 cmd_db_push() {
@@ -123,7 +160,7 @@ cmd_db_push() {
     log_error "db:push: remote backup failed, aborting"; return 1
   fi
   log_info "db:push: remote DB backed up to ~/wpb-backups/pre-push-$stamp.sql"
-  ssh "$(_remote_target)" "cd $(_remote_app) && wp db import - && wp search-replace '$LOCAL_URL' '$REMOTE_URL' --all-tables-with-prefix && wp rewrite flush" \
+  ssh "$(_remote_target)" "cd $(_remote_app) && wp db import - && wp search-replace '$LOCAL_URL' '$REMOTE_URL' --all-tables-with-prefix && wp search-replace '$(url_json_escape "$LOCAL_URL")' '$(url_json_escape "$REMOTE_URL")' --all-tables-with-prefix && wp rewrite flush" \
     < "$PROJECT_DIR/tmp/$dump" || return 1
   log_success "db:push done"
 }

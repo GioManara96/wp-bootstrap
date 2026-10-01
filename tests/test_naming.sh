@@ -27,6 +27,10 @@ valid_project_name -foo    && fail "leading dash accepted"
 
 [[ "$(url_strip_slash https://x.example.com//)" == "https://x.example.com" ]] || fail "url_strip_slash"
 [[ "$(url_strip_slash http://a.stage)" == "http://a.stage" ]]                 || fail "url_strip_slash noop"
+[[ "$(url_other_scheme https://x.example.com)" == "http://x.example.com" ]]   || fail "url_other_scheme https"
+[[ "$(url_other_scheme http://x.example.com/a)" == "https://x.example.com/a" ]] || fail "url_other_scheme http"
+[[ "$(url_json_escape https://x.example.com/a)" == 'https:\/\/x.example.com\/a' ]] || fail "url_json_escape"
+[[ "$(url_host https://x.example.com/a/b)" == "x.example.com" ]]             || fail "url_host"
 
 
 # ---- valid_project_name length ----

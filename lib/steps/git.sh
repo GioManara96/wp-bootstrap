@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib/steps/git.sh — clone (get), init/push (new), local excludes (both).
+# lib/steps/git.sh — clone (get), init/push (new, adopt), .gitignore (adopt), local excludes (all).
 
 step_clone() {
   step_begin clone "git clone $GIT_URL" || return 0
@@ -9,10 +9,12 @@ step_clone() {
   step_done clone
 }
 
+# step_git_init — git init + origin; with an empty GIT_URL (wpb adopt without a repo) local only
 step_git_init() {
-  step_begin git_init "git init + origin $GIT_URL" || return 0
-  if [[ "$DRY_RUN" == "true" ]]; then log_info "DRY-RUN: git init -b main; git remote add origin $GIT_URL"; return 0; fi
+  step_begin git_init "git init${GIT_URL:+ + origin $GIT_URL}" || return 0
+  if [[ "$DRY_RUN" == "true" ]]; then log_info "DRY-RUN: git init -b main${GIT_URL:+; git remote add origin $GIT_URL}"; return 0; fi
   [[ -d "$PROJECT_DIR/.git" ]] || in_project git init -q -b main || return 1
+  [[ -n "$GIT_URL" ]] || { step_done git_init; return 0; }
   local cur
   if cur="$(in_project git remote get-url origin 2>/dev/null)"; then
     if [[ "$cur" != "$GIT_URL" ]]; then
@@ -43,6 +45,18 @@ step_git_exclude() {
   step_done git_exclude
 }
 
+# step_gitignore — the standard WordPress .gitignore, unless the project already has one
+step_gitignore() {
+  step_begin gitignore ".gitignore" || return 0
+  if [[ "$DRY_RUN" == "true" ]]; then log_info "DRY-RUN: copy gitignore.template if absent"; return 0; fi
+  if [[ -f "$PROJECT_DIR/.gitignore" ]]; then
+    log_info "gitignore: keeping existing file"
+  else
+    cp "$WPB_ROOT/templates/gitignore.template" "$PROJECT_DIR/.gitignore" || return 1
+  fi
+  step_done gitignore
+}
+
 step_first_push() {
   step_begin first_push "initial commit + push" || return 0
   if [[ "$DRY_RUN" == "true" ]]; then log_info "DRY-RUN: git add -A; git commit; git push -u origin main"; return 0; fi
@@ -54,7 +68,7 @@ step_first_push() {
     return 1
   fi
   if ! in_project git rev-parse --verify -q HEAD >/dev/null; then
-    in_project git commit -q -m "Initial commit from wpb starter" || return 1
+    in_project git commit -q -m "${FIRST_COMMIT_MSG:-Initial commit from wpb starter}" || return 1
   fi
   in_project git push -u origin main || return 1
   step_done first_push

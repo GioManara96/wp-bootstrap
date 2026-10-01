@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# wpb — set up WordPress projects locally (new from the starter, or existing from GitLab).
+# wpb — set up WordPress projects locally (new from the starter, existing from GitLab,
+# or live on RunCloud without git).
 set -uo pipefail
 
 if (( BASH_VERSINFO[0] < 4 )); then
@@ -21,7 +22,7 @@ unset _f
 
 DRY_RUN=false; YES=false; NO_PULL=false; FORCE_STEP=""; NAME=""; TABLE_PREFIX=""; PROJECT_DIR=""
 
-WPB_STEP_IDS="starter_copy clone git_init git_exclude frontend_tools env_file core_download db_create wp_config htaccess tmp_folder wp_install first_push plugins_pull first_pull"
+WPB_STEP_IDS="starter_copy clone git_init git_exclude gitignore frontend_tools env_file code_pull core_download db_create wp_config htaccess tmp_folder wp_install first_push plugins_pull first_pull"
 
 wpb_help() {
   cat <<'HELP'
@@ -31,6 +32,8 @@ Commands:
   setup                     One-time machine setup: config, MySQL check, wildcard vhost
   new <gitlab-url>          New project from the starter; URL of an EMPTY GitLab repo
   get <gitlab-url>          Existing project: clone, .env, core, DB, wp-config, plugins:pull, db:pull
+  adopt [<gitlab-url>]      Site live on RunCloud, not on git: themes/plugins + DB from the server;
+                            pushes to the (empty) repo if given, else local only (needs --name)
   db:pull | db:push         Sync the DB with the remote (run inside a project folder)
   plugins:pull              Fill plugin files missing from git (rsync --ignore-existing)
   assets:pull | assets:push Sync wp-content/uploads with the remote
@@ -75,6 +78,7 @@ main() {
     setup)           cmd_setup ;;
     new)             cmd_new "${args[0]:-}" ;;
     get)             cmd_get "${args[0]:-}" ;;
+    adopt)           cmd_adopt "${args[0]:-}" ;;
     db:pull)         cmd_db_pull ;;
     db:push)         cmd_db_push ;;
     plugins:pull)    cmd_plugins_pull ;;

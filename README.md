@@ -7,6 +7,8 @@ common path.
   to a new repository.
 - **Existing project:** `wpb get <repo-url>`. It clones the repository, sets up WordPress and
   the database, then pulls the database and missing plugin files from the staging server.
+- **Live site, not on git:** `wpb adopt [<empty-repo-url>]`. It takes themes, plugins and the
+  database from the RunCloud server, and pushes them to a new repository if you give one.
 - **Day to day:** `wpb db:pull`, `wpb db:push`, `wpb assets:pull` and the other sync commands,
   run from inside the project folder.
 
@@ -21,12 +23,13 @@ Apache vhost again.
 2. [One-time machine setup](#1-one-time-machine-setup)
 3. [Start a new project from scratch](#2-start-a-new-project-from-scratch)
 4. [Put an existing online project on your Mac](#3-put-an-existing-online-project-on-your-mac)
-5. [Command reference](#command-reference)
-6. [Options](#options)
-7. [Configuration files](#configuration-files)
-8. [Resume, re-run a step, troubleshooting](#resume-re-run-a-step-troubleshooting)
-9. [Safety guarantees](#safety-guarantees)
-10. [Development](#development)
+5. [Put a live site that isn't on git on your Mac](#4-put-a-live-site-that-isnt-on-git-on-your-mac)
+6. [Command reference](#command-reference)
+7. [Options](#options)
+8. [Configuration files](#configuration-files)
+9. [Resume, re-run a step, troubleshooting](#resume-re-run-a-step-troubleshooting)
+10. [Safety guarantees](#safety-guarantees)
+11. [Development](#development)
 
 ---
 
@@ -208,9 +211,37 @@ To have it served at `<folder>.stage`, the folder name must be a valid domain la
 
 ---
 
+## 4. Put a live site that isn't on git on your Mac
+
+The site already runs on RunCloud but has no repository and no local copy, for example when
+you're asked to test or take over a site. Neither `new` (it starts from the starter) nor `get`
+(it takes the theme from the repository) fits: use `wpb adopt`.
+
+```bash
+wpb adopt git@git.example.com:group/acme-hotel.git   # with a new, EMPTY repository
+wpb adopt --name acme-hotel                          # no repository: local only
+```
+
+It asks for the same 4 remote values as `wpb get`, then runs, in order:
+
+1. `git init` (plus `origin` when you pass a URL)
+2. `.gitignore` from the standard WordPress template, if the project doesn't have one
+3. `.env`
+4. **`code_pull`**: `rsync` of `wp-content/themes`, `plugins` and `mu-plugins` from the server.
+   Uploads are not copied; run `wpb assets:pull` when you need them
+5. WordPress core, local DB and user, `wp-config.php`, `.htaccess`
+6. **`db:pull`**
+7. With a URL only: the first commit and push to `main`. Without one, nothing leaves your Mac;
+   publish later with `git remote add origin <url> && git push -u origin main`
+
+Log in with the credentials of the live site. Before the first push, `wpb adopt` checks that the
+repository is empty, like `wpb new`.
+
+---
+
 ## Command reference
 
-Run every command except `setup`, `new`, `get` and `starter:refresh` **inside a project folder**.
+Run every command except `setup`, `new`, `get`, `adopt` and `starter:refresh` **inside a project folder**.
 That is the folder that holds `wp-config.php`.
 
 | Command | What it does | Options it uses |
@@ -218,6 +249,7 @@ That is the folder that holds `wp-config.php`.
 | `wpb setup` | One-time machine setup (see [section 1](#1-one-time-machine-setup)) | `--dry-run` |
 | `wpb new <empty-repo-url>` | New project from the starter, first push | `--name`, `--force-step`, `--dry-run` |
 | `wpb get <repo-url>` | Existing project: clone → `.env` → core → DB → wp-config → `plugins:pull` → `db:pull` | `--name`, `--no-pull`, `--force-step`, `--dry-run` |
+| `wpb adopt [<empty-repo-url>]` | Live site without git: `git init` → `.gitignore` → `.env` → themes/plugins/mu-plugins from the server → core → DB → wp-config → `db:pull` → first push (with a URL) | `--name` (required without a URL), `--force-step`, `--dry-run` |
 | `wpb db:pull` | Replaces the **local** DB with the staging DB (details below) | `--dry-run` |
 | `wpb db:push` | Replaces the **staging** DB with the local DB (details below) | `--yes`, `--dry-run` |
 | `wpb plugins:pull` | `rsync --ignore-existing` of the remote `wp-content/plugins` into the local one (adds missing files only) | `--dry-run` |
@@ -233,22 +265,29 @@ That is the folder that holds `wp-config.php`.
 2. It backs up the local DB to `tmp/pre-pull-<date>.sql`.
 3. It imports the dump.
 4. It sets the table prefix, read from the remote and checked against the dump.
-5. It search-replaces the remote URL with the local URL and flushes the permalinks.
+5. It search-replaces the remote URLs with the local URL: `REMOTE_URL` and the `home` and
+   `siteurl` found in the dump, each with both `http://` and `https://`, plain and JSON-escaped
+   (`https:\/\/…`, as Elementor and blocks store them).
+6. If the remote `home` differs from `REMOTE_URL` only by scheme (for example you typed `http://`
+   and the site runs on `https://`), it fixes `REMOTE_URL` in `.env` and says so. It warns when
+   `home` or `siteurl` still don't point to the local URL.
+7. It flushes the permalinks and, when Elementor is active, regenerates its CSS.
 
 **`wpb db:push` in detail:**
 
 1. It checks that the local and remote table prefixes match.
 2. It shows the target URL and `user@host:webapps/app`, then asks for confirmation.
 3. It backs up the remote DB to `~/wpb-backups/` on the server, outside the web root.
-4. It streams the import and search-replaces the local URL with the remote URL.
+4. It streams the import and search-replaces the local URL with the remote URL, plain and
+   JSON-escaped.
 
 ## Options
 
 | Option | Applies to | Effect |
 |---|---|---|
-| `--name <name>` | `new`, `get` | Folder and domain name (`<name>.stage`). Default: the repository name, lowercased. Allowed: `a-z`, `0-9`, `-` |
+| `--name <name>` | `new`, `get`, `adopt` | Folder and domain name (`<name>.stage`). Default: the repository name, lowercased. Allowed: `a-z`, `0-9`, `-` |
 | `--no-pull` | `get` | Skips `plugins:pull` and `db:pull` |
-| `--force-step <id>` | `new`, `get` | Re-runs one step even if it is marked done (ids below) |
+| `--force-step <id>` | `new`, `get`, `adopt` | Re-runs one step even if it is marked done (ids below) |
 | `--dry-run` | all | Prints what would happen and changes nothing |
 | `--yes`, `-y` | `db:push`, `starter:refresh` | Skips the confirmation |
 | `--help`, `-h` | all | Shows the help |
@@ -256,8 +295,8 @@ That is the folder that holds `wp-config.php`.
 Options go **after** the command: `wpb get <url> --no-pull`.
 
 **Step ids for `--force-step`:** `starter_copy`, `clone`, `git_init`, `git_exclude`,
-`frontend_tools`, `env_file`, `core_download`, `db_create`, `wp_config`, `htaccess`,
-`tmp_folder`, `wp_install`, `first_push`, `plugins_pull`, `first_pull`.
+`gitignore`, `frontend_tools`, `env_file`, `code_pull`, `core_download`, `db_create`,
+`wp_config`, `htaccess`, `tmp_folder`, `wp_install`, `first_push`, `plugins_pull`, `first_pull`.
 
 ---
 
@@ -330,6 +369,8 @@ Licenses of premium plugins are activated per site.
 - **Redo one step.** Use `wpb get <url> --force-step wp_config`, for example.
 - **"already served by a legacy vhost".** A per-site `<VirtualHost>` block written by hand in the
   vhosts file already uses that domain, and it takes precedence over the wildcard. Pass `--name` with another name, or remove the old block.
+- **`code_pull`: "no WordPress in user@host:webapps/app".** `REMOTE_APP_NAME` (or the SSH
+  values) in `.env` is wrong. List the apps with `ssh user@host ls webapps`, fix `.env`, re-run.
 - **"Database … already exists".** `wpb` never drops databases. Drop it yourself if it's
   leftover, or use `--name`.
 - **"table prefix mismatch" on `db:push`.** The staging install uses a different prefix than
@@ -357,7 +398,8 @@ Licenses of premium plugins are activated per site.
 - Remote values from `.env` are validated before they reach any ssh command.
 - Apache denies `.env*`, `.bootstrap-state`, `.git/` and the logs folder for **every** local
   site. Directory listing is off.
-- `wpb new` refuses to push `wp-config.php` or `.env`.
+- `wpb new` and `wpb adopt` refuse to push `wp-config.php` or `.env`, and push only into an
+  empty repository.
 
 ---
 

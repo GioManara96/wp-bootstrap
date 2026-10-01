@@ -2,7 +2,8 @@
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 for f in utils state naming project-env versions starter; do source "$SCRIPT_DIR/lib/$f.sh"; done
-for f in common git starter-copy env-file db-create core wp-install; do source "$SCRIPT_DIR/lib/steps/$f.sh"; done
+for f in common git starter-copy env-file db-create core wp-install code-pull; do source "$SCRIPT_DIR/lib/steps/$f.sh"; done
+source "$SCRIPT_DIR/lib/commands/remote.sh"
 
 # fail-fast stubs: accidental real calls are impossible unless a test redefines them
 for _c in ssh scp rsync wp mysql; do
@@ -171,5 +172,49 @@ step_wp_install 2>"$TMP/err" || fail "wp_install (both fail)"
 ACT_COUNT="$(wc -l < "$ACTF" | tr -d " ")"; [[ "$ACT_COUNT" == "2" ]] || fail "expected 2 passes when both fail, got $ACT_COUNT"
 grep -q "failed to activate" "$TMP/err" || fail "missing warning when both passes fail"
 state_is_done "$PROJECT_DIR" wp_install || fail "wp_install not marked (both fail)"
+
+# git_init without a repo URL: local repo, no origin
+PROJECT_DIR="$TMP/sites/adopt-local"; mkdir -p "$PROJECT_DIR"; state_init "$PROJECT_DIR"; GIT_URL=""
+step_git_init 2>/dev/null || fail "git_init without url"
+[[ -d "$PROJECT_DIR/.git" ]] || fail "git_init without url: no repo"
+git -C "$PROJECT_DIR" remote get-url origin >/dev/null 2>&1 && fail "git_init without url added origin"
+
+# gitignore: template copied once, an existing file is kept
+WPB_ROOT="$SCRIPT_DIR"
+step_gitignore 2>/dev/null || fail "gitignore"
+grep -qxF 'wp-config.php' "$PROJECT_DIR/.gitignore" || fail "gitignore template: wp-config.php"
+grep -qxF '/wp-content/uploads/' "$PROJECT_DIR/.gitignore" || fail "gitignore template: uploads"
+printf 'custom\n' > "$PROJECT_DIR/.gitignore"; state_clear "$PROJECT_DIR" gitignore
+step_gitignore 2>/dev/null || fail "gitignore re-run"
+[[ "$(cat "$PROJECT_DIR/.gitignore")" == "custom" ]] || fail "existing .gitignore overwritten"
+
+# code_pull: themes, plugins, mu-plugins from the remote wp-content (no uploads)
+penv_set "$PROJECT_DIR/.env" REMOTE_SSH_USER sample-user; penv_set "$PROJECT_DIR/.env" REMOTE_SSH_HOST 203.0.113.10
+penv_set "$PROJECT_DIR/.env" REMOTE_APP_NAME sample_app
+penv_set "$PROJECT_DIR/.env" REMOTE_URL https://staging.example.com; penv_set "$PROJECT_DIR/.env" LOCAL_URL http://adopt-local.stage
+RSF="$TMP/rsync-args"
+ssh() { return 1; }
+rsync() { echo called > "$RSF"; }
+: > "$RSF"; step_code_pull 2>"$TMP/err" && fail "code_pull accepted a missing remote wp-content"
+grep -q sample_app "$TMP/err" || fail "code_pull missing-remote message: $(cat "$TMP/err")"
+[[ -s "$RSF" ]] && fail "code_pull ran rsync without a remote wp-content"
+state_is_done "$PROJECT_DIR" code_pull && fail "code_pull marked done after failure"
+ssh() { return 0; }
+rsync() { printf '%s\n' "$@" > "$RSF"; }
+step_code_pull 2>/dev/null || fail "code_pull"
+grep -qxF 'sample-user@203.0.113.10:webapps/sample_app/wp-content/' "$RSF" || fail "code_pull source: $(cat "$RSF")"
+grep -qxF "$PROJECT_DIR/wp-content/" "$RSF" || fail "code_pull dest"
+for d in plugins themes mu-plugins; do grep -qxF "/$d/***" "$RSF" || fail "code_pull misses $d"; done
+grep -qxF '*' "$RSF" || fail "code_pull must exclude everything else"
+grep -q 'uploads' "$RSF" && fail "code_pull must not copy uploads"
+state_is_done "$PROJECT_DIR" code_pull || fail "code_pull not marked"
+state_clear "$PROJECT_DIR" code_pull
+rsync() { return 23; }
+step_code_pull 2>"$TMP/err" || fail "code_pull partial transfer should warn, not fail"
+grep -qi partial "$TMP/err" || fail "code_pull partial warning"
+state_clear "$PROJECT_DIR" code_pull
+rsync() { return 12; }
+step_code_pull 2>/dev/null && fail "code_pull failure accepted"
+rsync() { command rsync "$@"; }
 
 echo "PASS: test_steps.sh"

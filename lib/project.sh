@@ -3,9 +3,14 @@
 # Requires lib/utils.sh, lib/naming.sh and lib/vhost.sh.
 
 # project_init_vars <git-url> — sets NAME (unless given via --name), PROJECT_DIR,
-# LOCAL_URL, DB_NAME, DB_USER, DB_PASSWORD, TABLE_PREFIX, GIT_URL
+# LOCAL_URL, DB_NAME, DB_USER, DB_PASSWORD, TABLE_PREFIX, GIT_URL.
+# An empty <git-url> (wpb adopt without a repo) needs --name.
 project_init_vars() {
   GIT_URL="$1"
+  if [[ -z "$GIT_URL" && -z "${NAME:-}" ]]; then
+    log_error "No repo URL: pass --name <name>."
+    return 1
+  fi
   [[ -n "${NAME:-}" ]] || NAME="$(name_from_git_url "$GIT_URL")"
   NAME="$(tr '[:upper:]' '[:lower:]' <<<"$NAME")"
   if ! valid_project_name "$NAME"; then
@@ -36,7 +41,7 @@ preflight_project_dir() {
   fi
 }
 
-# preflight_remote_empty <git-url> — `wpb new` only pushes into an empty repo
+# preflight_remote_empty <git-url> — `wpb new` and `wpb adopt` only push into an empty repo
 preflight_remote_empty() {
   local out
   if ! out="$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes" git ls-remote "$1" 2>&1)"; then
@@ -44,7 +49,7 @@ preflight_remote_empty() {
     return 1
   fi
   if [[ -n "$out" ]]; then
-    log_error "$1 is not empty. 'wpb new' needs an empty repo; for an existing project use 'wpb get'."
+    log_error "$1 is not empty. 'wpb new' and 'wpb adopt' need an empty repo; for a project already on git use 'wpb get'."
     return 1
   fi
 }
@@ -64,14 +69,14 @@ preflight_vhost_free() {
   fi
 }
 
-# project_rerun_hint <get|new> — printed when a step failed
+# project_rerun_hint <get|new|adopt> — printed when a step failed
 project_rerun_hint() {
   local extra=""
   [[ "${NO_PULL:-false}" == "true" ]] && extra=" --no-pull"
-  log_error "Fix the cause, then re-run: wpb $1 $GIT_URL --name $NAME$extra"
+  log_error "Fix the cause, then re-run: wpb $1${GIT_URL:+ $GIT_URL} --name $NAME$extra"
 }
 
-# print_summary <new|get>
+# print_summary <new|get|adopt>
 print_summary() {
   local admin=""
   [[ "$1" == "new" ]] && admin="   (admin / admin)"
@@ -84,14 +89,22 @@ wpb — $NAME ready
   Admin:   $LOCAL_URL/wp-admin$admin
   Folder:  $PROJECT_DIR
   DB:      $DB_NAME / $DB_USER
-  npm:     tail -f $PROJECT_DIR/tmp/npm-install.log
 EOF
+  [[ "$1" == "adopt" ]] || printf '  npm:     tail -f %s/tmp/npm-install.log\n' "$PROJECT_DIR" >&2
   if [[ "$1" == "new" ]]; then
     cat >&2 <<EOF
 
 Next: create the RunCloud app + GitLab deploy webhook.
       'wpb db:pull' / 'wpb db:push' will ask for the remote data once.
 EOF
+  fi
+  if [[ "$1" == "adopt" ]]; then
+    cat >&2 <<EOF
+
+Admin:  same users and passwords as the remote site.
+Next:   wpb assets:pull (uploads)${GIT_URL:+ · RunCloud: link the app to $GIT_URL (deploy webhook)}
+EOF
+    [[ -n "$GIT_URL" ]] || printf '        No repo: local git only. To publish later: git remote add origin <url> && git push -u origin main\n' >&2
   fi
   printf '============================================================\n' >&2
 }

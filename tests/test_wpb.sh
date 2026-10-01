@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP"' EXIT
 export WPB_CONFIG_FILE="$TMP/config"
 
 out="$(bash "$WPB" help 2>&1)" || fail "help exit code"
-[[ "$out" == *"get <gitlab-url>"* ]] || fail "help text: $out"
+[[ "$out" == *"get <gitlab-url>"* && "$out" == *"adopt [<gitlab-url>]"* ]] || fail "help text: $out"
 bash "$WPB" nope >/dev/null 2>&1 && fail "unknown command accepted"
 bash "$WPB" get --bogus x >/dev/null 2>&1 && fail "unknown flag accepted"
 bash "$WPB" get git@example.com:g/foo.git >/dev/null 2>&1 && fail "get without config accepted"
@@ -21,6 +21,16 @@ out="$(bash "$WPB" get --dry-run git@example.com:g/foo-bar.git 2>&1)" || fail "d
 [[ "$out" == *"[plugins_pull]"* && "$out" == *"[first_pull]"* ]] || fail "dry-run steps missing: $out"
 [[ "$out" == *"DRY-RUN complete"* ]] || fail "dry-run completion missing: $out"
 [[ ! -e "$TMP/sites/foo-bar" ]] || fail "dry-run created the project"
+out="$(bash "$WPB" adopt --dry-run git@example.com:g/live-site.git 2>&1)" || fail "dry-run adopt: $out"
+for s in git_init gitignore env_file code_pull core_download wp_config first_pull first_push; do
+  [[ "$out" == *"[$s]"* ]] || fail "adopt dry-run misses $s: $out"
+done
+[[ "$out" == *"[frontend_tools]"* || "$out" == *"[wp_install]"* ]] && fail "adopt must not install from scratch: $out"
+[[ ! -e "$TMP/sites/live-site" ]] || fail "adopt dry-run created the project"
+out="$(bash "$WPB" adopt --dry-run --name testonly 2>&1)" || fail "adopt without repo: $out"
+[[ "$out" == *"[first_pull]"* && "$out" != *"[first_push]"* ]] || fail "adopt without repo must not push: $out"
+out="$(bash "$WPB" adopt --dry-run 2>&1)" && fail "adopt without url and --name accepted"
+[[ "$out" == *"--name"* ]] || fail "adopt usage message: $out"
 out="$(bash "$WPB" new --dry-run git@example.com:g/foo.git 2>&1)" && fail "new without starter accepted"
 [[ "$out" == *"No starter configured"* ]] || fail "new error message: $out"
 

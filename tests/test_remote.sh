@@ -94,6 +94,39 @@ cmd_db_pull 2>"$TMP/err" && fail "non-SQL dump accepted"
 grep -q 'not a SQL dump' "$TMP/err" || fail "non-SQL message"
 grep -q '^wp ' "$CALLS" && fail "wp ran before dump validation"
 
+# ---- db:pull URL rewrite: both schemes, JSON-escaped form, real home fixes .env ----
+: > "$CALLS"; REMOTE_PREFIX_OUT=$'bar_\n'; DUMP_BODY='CREATE TABLE `bar_options` (x int);'
+ssh() { echo "ssh $*" >> "$CALLS"; case "$*" in *"wp db export -"*) printf '%s\n' "$DUMP_BODY" ;; *"wp db prefix"*) printf '%s' "$REMOTE_PREFIX_OUT" ;; esac; }
+OPT_HOME="http://staging.example.com/"; OPT_SITEURL="http://staging.example.com"
+wp() {
+  echo "wp $*" >> "$CALLS"
+  case "$*" in
+    "core is-installed") return 0 ;;
+    "option get home") printf 'Notice: x\n%s\n' "$OPT_HOME" ;;
+    "option get siteurl") printf '%s\n' "$OPT_SITEURL" ;;
+    "plugin is-active elementor") return 0 ;;
+  esac
+  return 0
+}
+cmd_db_pull 2>"$TMP/err" || fail "db:pull url rewrite"
+grep -qF 'wp search-replace https://staging.example.com http://sampleproject.stage' "$CALLS" || fail "https form not replaced"
+grep -qF 'wp search-replace http://staging.example.com http://sampleproject.stage' "$CALLS"  || fail "http form not replaced"
+grep -qF 'wp search-replace https:\/\/staging.example.com http:\/\/sampleproject.stage' "$CALLS" || fail "escaped https form not replaced"
+grep -qF 'wp search-replace http:\/\/staging.example.com http:\/\/sampleproject.stage' "$CALLS"  || fail "escaped http form not replaced"
+[[ "$(grep -c 'search-replace http://staging.example.com ' "$CALLS")" == "1" ]] || fail "duplicate replacement"
+grep -q 'wp elementor flush_css' "$CALLS" || fail "elementor css not flushed"
+[[ "$(penv_get "$PROJECT_DIR/.env" REMOTE_URL)" == "http://staging.example.com" ]] || fail "REMOTE_URL not aligned to remote home"
+grep -q 'REMOTE_URL' "$TMP/err" || fail "REMOTE_URL change not reported"
+# home still remote after search-replace → warning; different host → .env untouched
+cp "$TMP/env.good" "$PROJECT_DIR/.env"; : > "$CALLS"
+OPT_HOME="https://www.other.example"; OPT_SITEURL="https://www.other.example"
+cmd_db_pull 2>"$TMP/err" || fail "db:pull other host"
+grep -qF 'wp search-replace https://www.other.example http://sampleproject.stage' "$CALLS" || fail "remote home not replaced"
+[[ "$(penv_get "$PROJECT_DIR/.env" REMOTE_URL)" == "https://staging.example.com" ]] || fail "REMOTE_URL changed for another host"
+grep -q 'still' "$TMP/err" || fail "missing warning: home not rewritten"
+cp "$TMP/env.good" "$PROJECT_DIR/.env"; unset OPT_HOME OPT_SITEURL
+project_context </dev/null 2>/dev/null || fail "context after url tests"
+
 # ---- db:push ----
 ssh() {
   echo "ssh $*" >> "$CALLS"
@@ -113,6 +146,7 @@ grep -q 'db import' "$CALLS" && fail "import without confirmation"
 : > "$CALLS"; rm -f "$TMP/pushed.sql"
 cmd_db_push <<<"y" 2>/dev/null || fail "db:push confirmed"
 grep -q 'wpb-backups/pre-push-' "$CALLS" || fail "remote backup"
+grep -qF "wp search-replace 'http:\/\/sampleproject.stage' 'https:\/\/staging.example.com'" "$CALLS" || fail "db:push escaped form"
 [[ -s "$TMP/pushed.sql" ]] || fail "dump not streamed via stdin"
 b="$(grep -n 'wpb-backups' "$CALLS" | head -1 | cut -d: -f1)"; i="$(grep -n 'db import -' "$CALLS" | head -1 | cut -d: -f1)"
 (( b < i )) || fail "backup must precede import"
